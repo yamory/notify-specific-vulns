@@ -20,7 +20,9 @@ GitHub Actions (毎時)
 ## セットアップ
 
 1. このリポジトリを GitHub に push する
-2. リポジトリの **Settings → Secrets and variables → Actions** に以下を登録
+2. リポジトリの **Settings → Secrets and variables → Actions** を開き、
+   **Repository secrets** の欄（New repository secret）に以下を登録
+   （⚠️ Environment secrets に登録するとワークフローから参照できません）
    | Secret | 内容 |
    |---|---|
    | `YAMORY_API_TOKEN` | yamory 管理画面で発行した API トークン |
