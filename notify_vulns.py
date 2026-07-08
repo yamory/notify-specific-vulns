@@ -83,6 +83,18 @@ def fetch_pattern(token: str, params: dict) -> list[dict]:
     return items
 
 
+# ドキュメント上の脆弱性IDフィールドは vulnId だが、表記揺れに備えて候補を順に見る
+VULN_ID_KEYS = ("vulnId", "vulnerabilityId", "vulnID", "id")
+
+
+def get_vuln_id(v: dict) -> str:
+    for key in VULN_ID_KEYS:
+        value = v.get(key)
+        if value:
+            return str(value)
+    return ""
+
+
 # ------------------------------------------------------------------- 台帳
 
 
@@ -110,9 +122,10 @@ def cve_flags(vulns: list[dict]) -> str:
     scores = [v.get("cvssScore") for v in vulns if v.get("cvssScore") is not None]
     if scores:
         parts.append(f"CVSS {max(scores)}")
-    if any(v.get("isKev") for v in vulns):
+    # フィールド名はドキュメント上 isCisaKev / hasPoC。旧想定の別名もフォールバックで見る
+    if any(v.get("isCisaKev") or v.get("isKev") for v in vulns):
         parts.append("KEV該当")
-    if any(v.get("hasPoc") for v in vulns):
+    if any(v.get("hasPoC") or v.get("hasPoc") for v in vulns):
         parts.append("PoCあり")
     return " / ".join(parts) if parts else "-"
 
@@ -218,16 +231,29 @@ def main() -> int:
 
     # 全パターンを検索し、vulnId ごとに集約（マッチした条件ラベルも記録）
     found: dict[str, dict] = {}
+    skipped = 0
+    sample_item = None
     for pattern in config["patterns"]:
         label = pattern["label"]
         items = fetch_pattern(token, pattern["params"])
         print(f"[fetch] {label}: {len(items)} 件")
         for v in items:
-            vuln_id = str(v.get("vulnId") or "")
+            if sample_item is None:
+                sample_item = v
+            vuln_id = get_vuln_id(v)
             if not vuln_id:
+                skipped += 1
                 continue
             entry = found.setdefault(vuln_id, {"vuln": v, "labels": set()})
             entry["labels"].add(label)
+
+    if skipped:
+        print(f"[warn] IDフィールドを解決できず {skipped} 件をスキップしました", file=sys.stderr)
+        if sample_item is not None:
+            print(
+                f"[warn] レスポンス項目のフィールド名: {sorted(sample_item.keys())}",
+                file=sys.stderr,
+            )
 
     # 未通知の vulnId のみ抽出
     new_entries = {vid: e for vid, e in found.items() if vid not in notified}
