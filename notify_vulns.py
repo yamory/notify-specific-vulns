@@ -109,17 +109,27 @@ def fetch_pattern(token: str, params: dict) -> list[dict]:
 VULN_ID_KEYS = ("vulnId", "vulnerabilityId", "vulnID", "id")
 CVE_ID_KEYS = ("cveId", "cveID", "cve", "relatedCveId")
 CVE_LIST_KEYS = ("cveIds", "cves", "referenceIds")
-CVSS_KEYS = ("cvssScore", "cvssBaseScore", "cvss")
-URL_KEYS = ("detailUrl", "detailURL", "url", "permalink")
+CVSS_KEYS = ("cvssScore", "cvssBaseScore", "cvssV3Score", "baseScore", "cvss")
+URL_KEYS = ("detailUrl", "detailURL", "permalink")
+
+
+def _collect_dicts(v: dict, depth: int = 3) -> list[dict]:
+    """v 自身と、ネストされた辞書（リスト内の辞書も含む）を depth 段まで集める。"""
+    result = [v]
+    if depth <= 0:
+        return result
+    for val in v.values():
+        if isinstance(val, dict):
+            result.extend(_collect_dicts(val, depth - 1))
+        elif isinstance(val, list):
+            for x in val:
+                if isinstance(x, dict):
+                    result.extend(_collect_dicts(x, depth - 1))
+    return result
 
 
 def find_value(v: dict, keys, list_keys=()):
-    dicts = [v]
-    for val in v.values():
-        if isinstance(val, dict):
-            dicts.append(val)
-        elif isinstance(val, list):
-            dicts.extend(x for x in val if isinstance(x, dict))
+    dicts = _collect_dicts(v)
     for d in dicts:
         for key in keys:
             if d.get(key):
@@ -188,6 +198,17 @@ def cve_flags(vulns: list[dict]) -> str:
     return " / ".join(parts) if parts else "-"
 
 
+def get_description(vulns: list[dict]) -> str:
+    """詳細APIレスポンスから脆弱性の説明文（日本語優先）を取り出す。"""
+    for v in vulns:
+        detail = v.get("yamoryVulnDetail")
+        if isinstance(detail, dict):
+            desc = detail.get("descriptionJp") or detail.get("description")
+            if desc:
+                return str(desc)
+    return ""
+
+
 def build_cve_block(cve_key: str, entries: list[dict]) -> list[dict]:
     """1つのCVEグループをSlackブロックにする。entriesは {vuln, labels} のリスト。"""
     vulns = [e["vuln"] for e in entries]
@@ -215,18 +236,19 @@ def build_cve_block(cve_key: str, entries: list[dict]) -> list[dict]:
     detail_url = next(
         (find_value(v, URL_KEYS) for v in vulns if find_value(v, URL_KEYS)), None
     )
+    if not detail_url and cve_key.upper().startswith("CVE-"):
+        detail_url = f"https://nvd.nist.gov/vuln/detail/{cve_key}"
     title = f"*{cve_key}*  ({cve_flags(vulns)})"
     if detail_url:
         title = f"*<{detail_url}|{cve_key}>*  ({cve_flags(vulns)})"
 
-    text = "\n".join(
-        [
-            title,
-            f"検知条件: {', '.join(labels)}",
-            f"対象資産 ({len(seen_assets)}件):",
-            *asset_lines,
-        ]
-    )
+    lines = [title, f"検知条件: {', '.join(labels)}"]
+    desc = get_description(vulns)
+    if desc:
+        lines.append(f"概要: {desc[:200]}{'…' if len(desc) > 200 else ''}")
+    lines.append(f"対象資産 ({len(seen_assets)}件):")
+    lines.extend(asset_lines)
+    text = "\n".join(lines)
     return [
         {"type": "section", "text": {"type": "mrkdwn", "text": text[:2900]}},
         {"type": "divider"},
@@ -317,8 +339,8 @@ def main() -> int:
         if detail:
             print(f"[info] 脆弱性詳細のフィールド名: {sorted(detail.keys())}")
             print(
-                f"[info] 脆弱性詳細の内容(先頭500文字): "
-                f"{json.dumps(detail, ensure_ascii=False)[:500]}"
+                f"[info] 脆弱性詳細の内容(先頭1500文字): "
+                f"{json.dumps(detail, ensure_ascii=False)[:1500]}"
             )
     if skipped:
         print(f"[warn] IDフィールドを解決できず {skipped} 件をスキップしました", file=sys.stderr)
