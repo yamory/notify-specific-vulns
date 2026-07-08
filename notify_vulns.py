@@ -123,7 +123,14 @@ def fetch_pattern(token: str, params: dict) -> list[dict]:
 VULN_ID_KEYS = ("vulnId", "vulnerabilityId", "vulnID", "id")
 CVE_ID_KEYS = ("cveId", "cveID", "cve", "relatedCveId")
 CVE_LIST_KEYS = ("cveIds", "cves", "referenceIds")
-CVSS_KEYS = ("cvssScore", "cvssBaseScore", "cvssV3Score", "baseScore", "cvss")
+# CVE詳細APIでは cvss オブジェクト内に文字列で入っている（v3優先、無ければv2）
+CVSS_KEYS = (
+    "cvssScore",
+    "cvss_v3_base_score",
+    "cvss_v2_base_score",
+    "cvssBaseScore",
+    "baseScore",
+)
 URL_KEYS = ("detailUrl", "detailURL", "permalink")
 
 
