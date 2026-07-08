@@ -36,18 +36,18 @@ jobs:
           SEED_MODE: ${{ inputs.seed == true && 'true' || 'false' }}
         run: python notify_vulns.py
 
-      - name: Commit notified state
+      # 実行ログ (state/last-run.log) は毎回変わるため、毎時必ずコミットされる。
+      # これによりリポジトリの活動が維持され、GitHub による schedule の
+      # 自動停止（60日無活動）を防ぐ。
+      - name: Commit notified state and run log
         run: |
-          if git diff --quiet state/notified.json; then
-            echo "No state changes."
-            exit 0
-          fi
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
 
           # 台帳はJSONのためgitの行マージでは衝突しやすい。
           # push競合時は origin 側と自分の台帳をユニオンマージして再試行する。
           cp state/notified.json /tmp/local-state.json
+          cp state/last-run.log /tmp/local-run.log
           for attempt in 1 2 3; do
             git fetch origin "${GITHUB_REF_NAME}"
             git reset --hard "origin/${GITHUB_REF_NAME}"
@@ -63,12 +63,13 @@ jobs:
               json.dump(remote, f, ensure_ascii=False, indent=2, sort_keys=True)
               f.write("\n")
           EOF
-            if git diff --quiet state/notified.json; then
-              echo "State already up to date on origin."
+            cp /tmp/local-run.log state/last-run.log
+            git add state/notified.json state/last-run.log
+            if git diff --cached --quiet; then
+              echo "Nothing to commit."
               exit 0
             fi
-            git add state/notified.json
-            git commit -m "chore: update notified vulnerabilities [skip ci]"
+            git commit -m "chore: record run log [skip ci]"
             if git push origin "HEAD:${GITHUB_REF_NAME}"; then
               exit 0
             fi

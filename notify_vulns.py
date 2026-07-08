@@ -407,6 +407,16 @@ def main() -> int:
         }
     save_state(state)
     print(f"[state] 台帳を更新しました (合計 {len(notified)} 件)")
+
+    # 実行ログ（1行・上書き）。毎時コミットすることでリポジトリの活動を維持し、
+    # GitHub による schedule の自動停止（60日無活動）を防ぐ。
+    run_log_path = os.path.join(os.path.dirname(STATE_PATH), "last-run.log")
+    notified_cves = 0 if seed_mode else len(groups)
+    with open(run_log_path, "w", encoding="utf-8") as f:
+        f.write(
+            f"{now} 検出 {len(found)} 件 / 新規 {len(new_entries)} 件 / "
+            f"通知 {notified_cves} CVE (seed={str(seed_mode).lower()})\n"
+        )
     return 0
 
 

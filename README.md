@@ -111,4 +111,5 @@ Public リポジトリなら無制限、Private でも無料枠 2,000分/月 に
 | [notify_vulns.py](notify_vulns.py) | メインスクリプト（Python 標準ライブラリのみ） |
 | [config.json](config.json) | 検索パターン定義 |
 | [state/notified.json](state/notified.json) | 通知済み vulnId 台帳（Actions が自動コミット） |
+| [state/last-run.log](state/last-run.log) | 直近の実行ログ1行（毎時コミット＝リポジトリの活動を維持し schedule の自動停止を防ぐ） |
 | [.github/workflows/vuln-notify.yml](.github/workflows/vuln-notify.yml) | 毎時実行ワークフロー |
