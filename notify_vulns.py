@@ -93,7 +93,12 @@ URL_KEYS = ("detailUrl", "detailURL", "url", "permalink")
 
 
 def find_value(v: dict, keys, list_keys=()):
-    dicts = [v] + [val for val in v.values() if isinstance(val, dict)]
+    dicts = [v]
+    for val in v.values():
+        if isinstance(val, dict):
+            dicts.append(val)
+        elif isinstance(val, list):
+            dicts.extend(x for x in val if isinstance(x, dict))
     for d in dicts:
         for key in keys:
             if d.get(key):
@@ -287,6 +292,11 @@ def main() -> int:
         for key, value in sample_item.items():
             if isinstance(value, dict):
                 print(f"[info] {key} 内のフィールド名: {sorted(value.keys())}")
+            elif isinstance(value, list) and value and isinstance(value[0], dict):
+                print(f"[info] {key}[0] 内のフィールド名: {sorted(value[0].keys())}")
+        # 脆弱性マスタ情報（公開情報）のため中身を出しても資産情報は漏れない
+        yv = sample_item.get("yamoryVuln")
+        print(f"[info] yamoryVuln の内容(先頭500文字): {json.dumps(yv, ensure_ascii=False)[:500]}")
     if skipped:
         print(f"[warn] IDフィールドを解決できず {skipped} 件をスキップしました", file=sys.stderr)
 
