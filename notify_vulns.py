@@ -131,7 +131,6 @@ CVSS_KEYS = (
     "cvssBaseScore",
     "baseScore",
 )
-URL_KEYS = ("detailUrl", "detailURL", "permalink")
 
 
 def _collect_dicts(v: dict, depth: int = 3) -> list[dict]:
@@ -254,11 +253,14 @@ def build_cve_block(cve_key: str, entries: list[dict]) -> list[dict]:
         rest = len(asset_lines) - 10
         asset_lines = asset_lines[:10] + [f"… 他 {rest} 件"]
 
-    detail_url = next(
-        (find_value(v, URL_KEYS) for v in vulns if find_value(v, URL_KEYS)), None
-    )
-    if not detail_url and cve_key.upper().startswith("CVE-"):
-        detail_url = f"https://nvd.nist.gov/vuln/detail/{cve_key}"
+    # yamory アプリの脆弱性検索（CVE-IDで絞り込み）に飛ばす
+    detail_url = None
+    if not cve_key.startswith("yamory:"):
+        detail_url = (
+            "https://app.yamory.io/assets/vulns?page=1&size=100"
+            f"&encodedKeyword={urllib.parse.quote(cve_key)}"
+            "&issueStatuses=OPEN,IN_PROGRESS"
+        )
     title = f"*{cve_key}*  ({cve_flags(vulns)})"
     if detail_url:
         title = f"*<{detail_url}|{cve_key}>*  ({cve_flags(vulns)})"
