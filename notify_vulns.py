@@ -35,13 +35,12 @@ STATE_PATH = os.path.join(BASE_DIR, "state", "notified.json")
 # ---------------------------------------------------------------- yamory API
 
 
-def api_get(token: str, params: dict):
+def api_get_url(token: str, url: str):
     # yamory API の認証形式は "Authorization: token {アクセストークン}"
     # https://docs.yamory.io/deb2f7f8a32846a5a0bd80bb40cfb770
     auth = token if token.lower().startswith(("token ", "bearer ")) else f"token {token}"
-    query = urllib.parse.urlencode(params)
     req = urllib.request.Request(
-        f"{API_URL}?{query}",
+        url,
         headers={"Authorization": auth, "Accept": "application/json"},
     )
     try:
@@ -50,6 +49,28 @@ def api_get(token: str, params: dict):
     except urllib.error.HTTPError as e:
         body = e.read().decode("utf-8", errors="replace")[:500]
         raise RuntimeError(f"yamory API error {e.code}: {body}") from e
+
+
+def api_get(token: str, params: dict):
+    return api_get_url(token, f"{API_URL}?{urllib.parse.urlencode(params)}")
+
+
+def fetch_vuln_detail(token: str, item: dict) -> None:
+    """yamoryVuln フィールドのURLから脆弱性詳細（CVSS等）を取得して item に添付する。
+
+    詳細は item["yamoryVulnDetail"] に辞書として入り、find_value の探索対象になる。
+    取得失敗は警告のみで処理を続行する。
+    """
+    url = item.get("yamoryVuln")
+    if not (isinstance(url, str) and url.startswith("https://")):
+        return
+    try:
+        detail = api_get_url(token, url)
+    except (RuntimeError, urllib.error.URLError, TimeoutError) as e:
+        print(f"[warn] 脆弱性詳細の取得に失敗: {e}", file=sys.stderr)
+        return
+    if isinstance(detail, dict):
+        item["yamoryVulnDetail"] = detail
 
 
 def extract_items(payload) -> list[dict]:
@@ -289,20 +310,28 @@ def main() -> int:
     # フィールド名のドキュメントと実レスポンスの差異を調査できるよう、常に出力する
     if sample_item is not None:
         print(f"[info] レスポンス項目のフィールド名: {sorted(sample_item.keys())}")
-        for key, value in sample_item.items():
-            if isinstance(value, dict):
-                print(f"[info] {key} 内のフィールド名: {sorted(value.keys())}")
-            elif isinstance(value, list) and value and isinstance(value[0], dict):
-                print(f"[info] {key}[0] 内のフィールド名: {sorted(value[0].keys())}")
-        # 脆弱性マスタ情報（公開情報）のため中身を出しても資産情報は漏れない
-        yv = sample_item.get("yamoryVuln")
-        print(f"[info] yamoryVuln の内容(先頭500文字): {json.dumps(yv, ensure_ascii=False)[:500]}")
+        # 詳細APIのスキーマも毎回1件だけ取得して確認できるようにする
+        # （脆弱性マスタ情報＝公開情報のため、内容をログに出しても資産情報は漏れない）
+        fetch_vuln_detail(token, sample_item)
+        detail = sample_item.get("yamoryVulnDetail")
+        if detail:
+            print(f"[info] 脆弱性詳細のフィールド名: {sorted(detail.keys())}")
+            print(
+                f"[info] 脆弱性詳細の内容(先頭500文字): "
+                f"{json.dumps(detail, ensure_ascii=False)[:500]}"
+            )
     if skipped:
         print(f"[warn] IDフィールドを解決できず {skipped} 件をスキップしました", file=sys.stderr)
 
     # 未通知の vulnId のみ抽出
     new_entries = {vid: e for vid, e in found.items() if vid not in notified}
     print(f"[diff] 検出 {len(found)} 件 / 新規 {len(new_entries)} 件")
+
+    # 新規分のみ詳細API（yamoryVuln のURL）を呼び、CVSS等の情報を補完する
+    if not seed_mode:
+        for e in new_entries.values():
+            if "yamoryVulnDetail" not in e["vuln"]:
+                fetch_vuln_detail(token, e["vuln"])
 
     # CVE-ID 単位にグルーピング（CVEが無いものは vulnId をキーに）
     groups: dict[str, list[dict]] = {}
