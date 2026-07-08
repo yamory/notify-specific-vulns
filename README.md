@@ -3,6 +3,8 @@
 yamory IT資産API を1時間ごとにポーリングし、条件（キーワード × CVSS / KEV / PoC）に合致する
 **新規の脆弱性だけ**を Slack に通知します。GitHub Actions のみで動作します（外部インフラ不要）。
 
+> 📦 **自社のGitHubリポジトリに移行して利用する場合は [MIGRATION.md](MIGRATION.md) の手順書をご覧ください。**
+
 ## 仕組み
 
 ```
