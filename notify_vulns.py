@@ -55,22 +55,36 @@ def api_get(token: str, params: dict):
     return api_get_url(token, f"{API_URL}?{urllib.parse.urlencode(params)}")
 
 
-def fetch_vuln_detail(token: str, item: dict) -> None:
-    """yamoryVuln フィールドのURLから脆弱性詳細（CVSS等）を取得して item に添付する。
-
-    詳細は item["yamoryVulnDetail"] に辞書として入り、find_value の探索対象になる。
-    取得失敗は警告のみで処理を続行する。
-    """
-    url = item.get("yamoryVuln")
+def _fetch_linked(token: str, url, label: str):
+    """URL文字列ならそのAPIを呼んで辞書を返す（失敗は警告のみ）。"""
     if not (isinstance(url, str) and url.startswith("https://")):
-        return
+        return None
     try:
-        detail = api_get_url(token, url)
+        result = api_get_url(token, url)
     except (RuntimeError, urllib.error.URLError, TimeoutError) as e:
-        print(f"[warn] 脆弱性詳細の取得に失敗: {e}", file=sys.stderr)
+        print(f"[warn] {label}の取得に失敗: {e}", file=sys.stderr)
+        return None
+    return result if isinstance(result, dict) else None
+
+
+def fetch_vuln_detail(token: str, item: dict) -> None:
+    """脆弱性の詳細情報をリンクをたどって取得し、item に添付する。
+
+    yamory API はリンク形式:
+      asset-vulns の yamoryVuln → /v1/asset-yamoryVulns/{id}（説明文など）
+      その cves[0] → /v1/cves/{CVE-ID}（CVSSスコアなど）
+    取得結果は item["yamoryVulnDetail"] / item["cveDetail"] に入り、
+    find_value のネスト探索の対象になる。取得失敗は警告のみで処理を続行する。
+    """
+    detail = _fetch_linked(token, item.get("yamoryVuln"), "脆弱性詳細")
+    if detail is None:
         return
-    if isinstance(detail, dict):
-        item["yamoryVulnDetail"] = detail
+    item["yamoryVulnDetail"] = detail
+    cves = detail.get("cves")
+    if isinstance(cves, list) and cves:
+        cve = _fetch_linked(token, cves[0], "CVE詳細")
+        if cve is not None:
+            item["cveDetail"] = cve
 
 
 def extract_items(payload) -> list[dict]:
@@ -338,13 +352,12 @@ def main() -> int:
         detail = sample_item.get("yamoryVulnDetail")
         if detail:
             print(f"[info] 脆弱性詳細のフィールド名: {sorted(detail.keys())}")
+        cve_detail = sample_item.get("cveDetail")
+        if cve_detail:
+            print(f"[info] CVE詳細のフィールド名: {sorted(cve_detail.keys())}")
             print(
-                f"[info] 詳細.cves: "
-                f"{json.dumps(detail.get('cves'), ensure_ascii=False)[:800]}"
-            )
-            print(
-                f"[info] 詳細.pocs: "
-                f"{json.dumps(detail.get('pocs'), ensure_ascii=False)[:400]}"
+                f"[info] CVE詳細の内容(先頭800文字): "
+                f"{json.dumps(cve_detail, ensure_ascii=False)[:800]}"
             )
     if skipped:
         print(f"[warn] IDフィールドを解決できず {skipped} 件をスキップしました", file=sys.stderr)
