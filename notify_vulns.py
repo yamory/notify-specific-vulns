@@ -7,7 +7,7 @@
 - SEED_MODE=true のときは通知せず、現時点の該当IDを台帳に記録するだけ（初回投入用）
 
 必要な環境変数:
-  YAMORY_API_TOKEN  : yamory APIトークン（Authorizationヘッダにそのまま設定）
+  YAMORY_API_TOKEN  : yamory APIアクセストークン（"token " プレフィックスは自動付与）
   SLACK_WEBHOOK_URL : Slack Incoming Webhook URL（SEED_MODE=true のときは省略可）
   SEED_MODE         : "true" で台帳への記録のみ行う（省略時 false）
 
@@ -36,10 +36,13 @@ STATE_PATH = os.path.join(BASE_DIR, "state", "notified.json")
 
 
 def api_get(token: str, params: dict):
+    # yamory API の認証形式は "Authorization: token {アクセストークン}"
+    # https://docs.yamory.io/deb2f7f8a32846a5a0bd80bb40cfb770
+    auth = token if token.lower().startswith(("token ", "bearer ")) else f"token {token}"
     query = urllib.parse.urlencode(params)
     req = urllib.request.Request(
         f"{API_URL}?{query}",
-        headers={"Authorization": token, "Accept": "application/json"},
+        headers={"Authorization": auth, "Accept": "application/json"},
     )
     try:
         with urllib.request.urlopen(req, timeout=60) as res:

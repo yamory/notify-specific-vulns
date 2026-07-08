@@ -25,14 +25,19 @@ GitHub Actions (毎時)
    （⚠️ Environment secrets に登録するとワークフローから参照できません）
    | Secret | 内容 |
    |---|---|
-   | `YAMORY_API_TOKEN` | yamory 管理画面で発行した API トークン |
+   | `YAMORY_API_TOKEN` | yamory の API アクセストークン（下記参照。トークン値のみを登録） |
    | `SLACK_WEBHOOK_URL` | Slack Incoming Webhook の URL |
+
+### YAMORY_API_TOKEN の取得手順
+
+1. yamory の **チーム設定画面** を開く
+2. **アクセストークンを発行**し、利用スコープで **「API サーバー」** を選択
+3. 発行されたトークン値をそのまま Secret に登録（`token ` プレフィックスはスクリプトが自動で付与します）
+
+（参考: https://docs.yamory.io/deb2f7f8a32846a5a0bd80bb40cfb770 ）
 3. **初回は Seed 実行**（重要）: Actions タブ → `yamory vulnerability notify` → `Run workflow` →
    `seed = true` で実行。既存の該当脆弱性が台帳に記録され、**大量の初回通知を防ぎます**。
 4. 以降は毎時0分（UTC）に自動実行され、新規分だけが通知されます。
-
-> **認証ヘッダについて**: トークンは `Authorization` ヘッダにそのまま設定しています。
-> もし 401 エラーになる場合は、Secret の値を `Bearer <トークン>` の形式にしてください。
 
 ### SLACK_WEBHOOK_URL の取得手順
 
