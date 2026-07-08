@@ -44,7 +44,35 @@ jobs:
           fi
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-          git add state/notified.json
-          git commit -m "chore: update notified vulnerabilities [skip ci]"
-          git pull --rebase origin "${GITHUB_REF_NAME}"
-          git push origin "HEAD:${GITHUB_REF_NAME}"
+
+          # 台帳はJSONのためgitの行マージでは衝突しやすい。
+          # push競合時は origin 側と自分の台帳をユニオンマージして再試行する。
+          cp state/notified.json /tmp/local-state.json
+          for attempt in 1 2 3; do
+            git fetch origin "${GITHUB_REF_NAME}"
+            git reset --hard "origin/${GITHUB_REF_NAME}"
+            python3 - <<'EOF'
+          import json
+
+          with open("/tmp/local-state.json", encoding="utf-8") as f:
+              local = json.load(f)
+          with open("state/notified.json", encoding="utf-8") as f:
+              remote = json.load(f)
+          remote.setdefault("vulnIds", {}).update(local.get("vulnIds", {}))
+          with open("state/notified.json", "w", encoding="utf-8") as f:
+              json.dump(remote, f, ensure_ascii=False, indent=2, sort_keys=True)
+              f.write("\n")
+          EOF
+            if git diff --quiet state/notified.json; then
+              echo "State already up to date on origin."
+              exit 0
+            fi
+            git add state/notified.json
+            git commit -m "chore: update notified vulnerabilities [skip ci]"
+            if git push origin "HEAD:${GITHUB_REF_NAME}"; then
+              exit 0
+            fi
+            echo "Push rejected (attempt ${attempt}). Retrying with merged state..."
+          done
+          echo "Failed to push state after 3 attempts." >&2
+          exit 1
