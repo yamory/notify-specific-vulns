@@ -85,6 +85,7 @@ def fetch_pattern(token: str, params: dict) -> list[dict]:
 
 # ドキュメント上の脆弱性IDフィールドは vulnId だが、表記揺れに備えて候補を順に見る
 VULN_ID_KEYS = ("vulnId", "vulnerabilityId", "vulnID", "id")
+CVE_ID_KEYS = ("cveId", "cveID", "cve", "relatedCveId")
 
 
 def get_vuln_id(v: dict) -> str:
@@ -92,6 +93,19 @@ def get_vuln_id(v: dict) -> str:
         value = v.get(key)
         if value:
             return str(value)
+    return ""
+
+
+def get_cve_id(v: dict) -> str:
+    for key in CVE_ID_KEYS:
+        value = v.get(key)
+        if value:
+            return str(value)
+    # 複数形（リスト）で返る場合に備える
+    for key in ("cveIds", "cves"):
+        values = v.get(key)
+        if isinstance(values, list) and values:
+            return str(values[0])
     return ""
 
 
@@ -247,22 +261,20 @@ def main() -> int:
             entry = found.setdefault(vuln_id, {"vuln": v, "labels": set()})
             entry["labels"].add(label)
 
+    # フィールド名のドキュメントと実レスポンスの差異を調査できるよう、常に出力する
+    if sample_item is not None:
+        print(f"[info] レスポンス項目のフィールド名: {sorted(sample_item.keys())}")
     if skipped:
         print(f"[warn] IDフィールドを解決できず {skipped} 件をスキップしました", file=sys.stderr)
-        if sample_item is not None:
-            print(
-                f"[warn] レスポンス項目のフィールド名: {sorted(sample_item.keys())}",
-                file=sys.stderr,
-            )
 
     # 未通知の vulnId のみ抽出
     new_entries = {vid: e for vid, e in found.items() if vid not in notified}
     print(f"[diff] 検出 {len(found)} 件 / 新規 {len(new_entries)} 件")
 
-    # CVE-ID 単位にグルーピング（cveId が無いものは vulnId をキーに）
+    # CVE-ID 単位にグルーピング（CVEが無いものは vulnId をキーに）
     groups: dict[str, list[dict]] = {}
     for vid, e in new_entries.items():
-        cve_key = e["vuln"].get("cveId") or f"yamory:{vid}"
+        cve_key = get_cve_id(e["vuln"]) or f"yamory:{vid}"
         groups.setdefault(cve_key, []).append(
             {"vuln": e["vuln"], "labels": sorted(e["labels"])}
         )
@@ -279,7 +291,7 @@ def main() -> int:
     now = datetime.now(timezone.utc).isoformat(timespec="seconds")
     for vid, e in new_entries.items():
         notified[vid] = {
-            "cveId": e["vuln"].get("cveId"),
+            "cveId": get_cve_id(e["vuln"]) or None,
             "recordedAt": now,
             "seeded": seed_mode,
         }
