@@ -1,0 +1,28 @@
+{
+  "patterns": [
+    {
+      "label": "IBM Websphere / CVSS 9.0以上",
+      "params": { "keyword": "IBM Websphere", "cvssScore": "9.0" }
+    },
+    {
+      "label": "IBM Websphere / KEV該当",
+      "params": { "keyword": "IBM Websphere", "includeKev": true }
+    },
+    {
+      "label": "IBM Websphere / PoCあり",
+      "params": { "keyword": "IBM Websphere", "includePoc": true }
+    },
+    {
+      "label": "Oracle DataBase / CVSS 9.0以上",
+      "params": { "keyword": "Oracle DataBase", "cvssScore": "9.0" }
+    },
+    {
+      "label": "Oracle DataBase / KEV該当",
+      "params": { "keyword": "Oracle DataBase", "includeKev": true }
+    },
+    {
+      "label": "Oracle DataBase / PoCあり",
+      "params": { "keyword": "Oracle DataBase", "includePoc": true }
+    }
+  ]
+}

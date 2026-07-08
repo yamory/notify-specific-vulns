@@ -1,0 +1,50 @@
+name: yamory vulnerability notify
+
+on:
+  schedule:
+    - cron: "0 * * * *" # 毎時0分 (UTC)
+  workflow_dispatch:
+    inputs:
+      seed:
+        description: "Seed mode: 通知せず現時点の該当IDを台帳に記録するだけ（初回に実行推奨）"
+        type: boolean
+        default: false
+
+# 台帳コミットの競合を防ぐため同時実行しない
+concurrency:
+  group: vuln-notify
+  cancel-in-progress: false
+
+permissions:
+  contents: write
+
+jobs:
+  notify:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Run vulnerability check
+        env:
+          YAMORY_API_TOKEN: ${{ secrets.YAMORY_API_TOKEN }}
+          SLACK_WEBHOOK_URL: ${{ secrets.SLACK_WEBHOOK_URL }}
+          SEED_MODE: ${{ inputs.seed == true && 'true' || 'false' }}
+        run: python notify_vulns.py
+
+      - name: Commit notified state
+        run: |
+          if git diff --quiet state/notified.json; then
+            echo "No state changes."
+            exit 0
+          fi
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add state/notified.json
+          git commit -m "chore: update notified vulnerabilities [skip ci]"
+          git pull --rebase origin "${GITHUB_REF_NAME}"
+          git push origin "HEAD:${GITHUB_REF_NAME}"
