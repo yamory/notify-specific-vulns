@@ -83,30 +83,49 @@ def fetch_pattern(token: str, params: dict) -> list[dict]:
     return items
 
 
-# ドキュメント上の脆弱性IDフィールドは vulnId だが、表記揺れに備えて候補を順に見る
+# 実レスポンスの項目はネストを含む（例: yamoryVuln オブジェクト内にCVE等の詳細がある）。
+# トップレベル → 1段ネストの辞書、の順で候補キーを探す。
 VULN_ID_KEYS = ("vulnId", "vulnerabilityId", "vulnID", "id")
 CVE_ID_KEYS = ("cveId", "cveID", "cve", "relatedCveId")
+CVE_LIST_KEYS = ("cveIds", "cves", "referenceIds")
+CVSS_KEYS = ("cvssScore", "cvssBaseScore", "cvss")
+URL_KEYS = ("detailUrl", "detailURL", "url", "permalink")
+
+
+def find_value(v: dict, keys, list_keys=()):
+    dicts = [v] + [val for val in v.values() if isinstance(val, dict)]
+    for d in dicts:
+        for key in keys:
+            if d.get(key):
+                return d[key]
+    for d in dicts:
+        for key in list_keys:
+            values = d.get(key)
+            if isinstance(values, list) and values:
+                return values[0]
+    return None
 
 
 def get_vuln_id(v: dict) -> str:
-    for key in VULN_ID_KEYS:
-        value = v.get(key)
-        if value:
-            return str(value)
-    return ""
+    value = find_value(v, VULN_ID_KEYS)
+    return str(value) if value else ""
 
 
 def get_cve_id(v: dict) -> str:
-    for key in CVE_ID_KEYS:
-        value = v.get(key)
-        if value:
-            return str(value)
-    # 複数形（リスト）で返る場合に備える
-    for key in ("cveIds", "cves"):
-        values = v.get(key)
-        if isinstance(values, list) and values:
-            return str(values[0])
-    return ""
+    # 実レスポンスでは referenceId にCVE-ID（等の脆弱性識別子）が入っている
+    ref = v.get("referenceId")
+    if ref:
+        return str(ref)
+    value = find_value(v, CVE_ID_KEYS, CVE_LIST_KEYS)
+    return str(value) if value else ""
+
+
+def get_cvss(v: dict):
+    value = find_value(v, CVSS_KEYS)
+    try:
+        return float(value)
+    except (TypeError, ValueError):
+        return None
 
 
 # ------------------------------------------------------------------- 台帳
@@ -133,13 +152,12 @@ def save_state(state: dict) -> None:
 
 def cve_flags(vulns: list[dict]) -> str:
     parts = []
-    scores = [v.get("cvssScore") for v in vulns if v.get("cvssScore") is not None]
+    scores = [s for s in (get_cvss(v) for v in vulns) if s is not None]
     if scores:
         parts.append(f"CVSS {max(scores)}")
-    # フィールド名はドキュメント上 isCisaKev / hasPoC。旧想定の別名もフォールバックで見る
-    if any(v.get("isCisaKev") or v.get("isKev") for v in vulns):
+    if any(find_value(v, ("isKev", "isCisaKev")) for v in vulns):
         parts.append("KEV該当")
-    if any(v.get("hasPoC") or v.get("hasPoc") for v in vulns):
+    if any(find_value(v, ("hasPoc", "hasPoC")) for v in vulns):
         parts.append("PoCあり")
     return " / ".join(parts) if parts else "-"
 
@@ -168,7 +186,9 @@ def build_cve_block(cve_key: str, entries: list[dict]) -> list[dict]:
         rest = len(asset_lines) - 10
         asset_lines = asset_lines[:10] + [f"… 他 {rest} 件"]
 
-    detail_url = next((v.get("detailUrl") for v in vulns if v.get("detailUrl")), None)
+    detail_url = next(
+        (find_value(v, URL_KEYS) for v in vulns if find_value(v, URL_KEYS)), None
+    )
     title = f"*{cve_key}*  ({cve_flags(vulns)})"
     if detail_url:
         title = f"*<{detail_url}|{cve_key}>*  ({cve_flags(vulns)})"
@@ -264,6 +284,9 @@ def main() -> int:
     # フィールド名のドキュメントと実レスポンスの差異を調査できるよう、常に出力する
     if sample_item is not None:
         print(f"[info] レスポンス項目のフィールド名: {sorted(sample_item.keys())}")
+        for key, value in sample_item.items():
+            if isinstance(value, dict):
+                print(f"[info] {key} 内のフィールド名: {sorted(value.keys())}")
     if skipped:
         print(f"[warn] IDフィールドを解決できず {skipped} 件をスキップしました", file=sys.stderr)
 
