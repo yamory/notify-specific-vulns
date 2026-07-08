@@ -339,8 +339,12 @@ def main() -> int:
         if detail:
             print(f"[info] 脆弱性詳細のフィールド名: {sorted(detail.keys())}")
             print(
-                f"[info] 脆弱性詳細の内容(先頭1500文字): "
-                f"{json.dumps(detail, ensure_ascii=False)[:1500]}"
+                f"[info] 詳細.cves: "
+                f"{json.dumps(detail.get('cves'), ensure_ascii=False)[:800]}"
+            )
+            print(
+                f"[info] 詳細.pocs: "
+                f"{json.dumps(detail.get('pocs'), ensure_ascii=False)[:400]}"
             )
     if skipped:
         print(f"[warn] IDフィールドを解決できず {skipped} 件をスキップしました", file=sys.stderr)
