@@ -409,6 +409,11 @@
       "cveId": "CVE-2026-14446",
       "recordedAt": "2026-07-30T00:34:34+00:00",
       "seeded": false
+    },
+    "01KYR5TYS1VR7D0ZAE11HX01FC": {
+      "cveId": "CVE-2026-14974",
+      "recordedAt": "2026-08-05T19:32:37+00:00",
+      "seeded": false
     }
   }
 }
